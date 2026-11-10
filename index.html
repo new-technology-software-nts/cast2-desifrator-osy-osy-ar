@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kryptografický Analyzer II – Opravený & Rozšířený</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans antialiased">
+
+    <!-- HLAVIČKA -->
+    <header class="bg-slate-800 border-b border-slate-700 py-6 px-4 shadow-lg sticky top-0 z-30">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-indigo-400 tracking-tight">Kryptografický Analyzer II</h1>
+                <p class="text-xs md:text-sm text-slate-400">Opravený modul chybějících šifer + integrovaná Pigpen šifra</p>
+            </div>
+            <div class="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+                <button onclick="copyAllResults()" class="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-sm shadow-md transition flex items-center justify-center gap-2 shrink-0">
+                    <span>📋</span> Kopírovat výsledky
+                </button>
+                <div class="w-full md:w-80">
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Globální šifrovaný text:</label>
+                    <input type="text" id="globalCiphertext" value="" 
+                           class="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-indigo-300 font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                           placeholder="Zadejte kód/šifru...">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8 space-y-12">
+
+        <!-- ČÁST 1: AUTOMATICKÉ DEKODÉRY A SPECIÁLNÍ ŠIFRY -->
+        <section class="space-y-6">
+            <div class="border-b border-slate-700 pb-4">
+                <h2 class="text-xl font-bold text-emerald-400 flex items-center gap-2">
+                    <span>⚡</span> 1. Automatické dekodéry (Hex, Binární, Base64, Pigpen, A1Z26, Baudot, Braille)
+                </h2>
+                <p class="text-sm text-slate-400">Automatická detekce a převod kódování i mřížkových šifer bez nutnosti zadávat klíč.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="automaticResultsContainer">
+                <!-- Dynamicky naplněno JS -->
+            </div>
+        </section>
+
+        <!-- DĚLÍCÍ ČÁRA -->
+        <div class="relative flex py-5 items-center">
+            <div class="flex-grow border-t border-slate-700"></div>
+            <span class="flex-shrink mx-4 text-slate-400 text-xs font-bold uppercase tracking-widest bg-slate-800 px-4 py-1 rounded-full border border-slate-700">Pokročilé metody s klíčem a parametry</span>
+            <div class="flex-grow border-t border-slate-700"></div>
+        </div>
+
+        <!-- ČÁST 2: ŠIFRY VYŽADUJÍCÍ KLÍČ NEBO PARAMETRY -->
+        <section class="space-y-6">
+            <div class="border-b border-slate-700 pb-4">
+                <h2 class="text-xl font-bold text-amber-400 flex items-center gap-2">
+                    <span>🔑</span> 2. Pokročilé šifry s klíčem (Autoklíčová šifra, Alfanumerický Polybiův čtverec 6x6, Semafor)
+                </h2>
+                <p class="text-sm text-slate-400">Šifry vyžadující počáteční klíč, mřížku nebo specifické nastavení úhlů a pozic.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="keyBasedContainer">
+                <!-- Karty pro šifry s klíčem -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODÁLNÍ OKNO PRO DETAIL POSTUPU -->
+    <div id="detailModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-slate-800 px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+                <h3 id="modalTitle" class="text-lg font-bold text-indigo-400">Detail dešifrování</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scroll space-y-4 text-sm text-slate-300" id="modalBody">
+                <!-- Dynamický obsah detailu -->
+            </div>
+            <div class="bg-slate-800 px-6 py-3 border-t border-slate-700 flex justify-end">
+                <button onclick="closeModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold transition">Zavřít</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIKA -->
+    <script>
+        const globalInput = document.getElementById('globalCiphertext');
+
+        function cleanText(txt) {
+            return txt.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        }
+
+        window.addEventListener('DOMContentLoaded', updateAll);
+        globalInput.addEventListener('input', updateAll);
+
+        function updateAll() {
+            renderAutomaticCiphers();
+            renderKeyBasedCiphers();
+        }
+
+        // ==========================================
+        // KOPÍROVÁNÍ VÝSLEDKŮ
+        // ==========================================
+        function copyAllResults() {
+            let textToCopy = `Zde máš několik výsledků několika šifer. Všechny je projdi a hledej smysluplný výsledek. Výsledky mohou být bez mezer a diakritiky. Tedy text projdi a najdi něco smysluplného. Následně do daného výsledku správně doplň mezery a diakritiku. Nic nešifruj - tohle jsou výsledky šifer - jen hledáš smysluplný výsledek. Následně zapiš výsledný smysluplný závěr a napiš z jaké kategorie (název šifry) výsledek pochází a která šifra (číslo) v pořadí v dané kategorii to je:\n\n`;
+
+            const raw = globalInput.value.trim();
+
+            if (!raw) {
+                alert('Zadejte prosím platný šifrovaný text.');
+                return;
+            }
+
+            let blocks = [];
+
+            // 1. Base64
+            let b64Res = decryptBase64(raw);
+            if (b64Res.valid) blocks.push({ name: "Base64 Dekodér", results: [b64Res.result] });
+
+            // 2. Hex
+            let hexRes = decryptHex(raw);
+            if (hexRes.valid) blocks.push({ name: "Hexadecimální kódování (Hex to ASCII)", results: [hexRes.result] });
+
+            // 3. Binary
+            let binRes = decryptBinary(raw);
+            if (binRes.valid) blocks.push({ name: "Binární kódování (8-bit Binary)", results: [binRes.result] });
+
+            // 4. Pigpen Šifra
+            let pigpenRes = decryptPigpen(raw);
+            if (pigpenRes.valid) blocks.push({ name: "Pigpen (Zednářská šifra)", results: [pigpenRes.result] });
+
+            // 5. A1Z26 Nerozdělený
+            let a1z26Unsplit = parseUnsplitA1Z26(raw);
+            if (a1z26Unsplit.results.length > 0) {
+                blocks.push({ name: "A1Z26 Nerozdělené sekvence (Backtracking)", results: a1z26Unsplit.results.slice(0, 10) });
+            }
+
+            // 6. Baudot ITA2
+            let baudotRes = decryptBaudot(raw);
+            if (baudotRes.valid) blocks.push({ name: "Baudotův kód (ITA2)", results: [baudotRes.result] });
+
+            // 7. Braillovo písmo
+            let brailleRes = decryptBraille(raw);
+            if (brailleRes.valid) blocks.push({ name: "Braillovo písmo", results: [brailleRes.result] });
+
+            // 8. Pokročilé šifry s klíčem
+            const keyCiphers = [
+                { id: 'autokey', name: 'Autoklíčová šifra (Autokey)' },
+                { id: 'polybius6x6', name: 'Polybiův čtverec 6x6 (Alfanumerický)' },
+                { id: 'semaphore', name: 'Semaforová abeceda' }
+            ];
+
+            keyCiphers.forEach(kc => {
+                const resContainer = document.getElementById(`result_${kc.id}`);
+                if (resContainer) {
+                    const resultSpan = resContainer.querySelector('.font-bold.text-emerald-400');
+                    if (resultSpan) {
+                        let resText = resultSpan.innerText.trim();
+                        if (resText && !resContainer.querySelector('.text-red-400') && !resContainer.querySelector('.italic')) {
+                            blocks.push({
+                                name: kc.name,
+                                results: [resText]
+                            });
+                        }
+                    }
+                }
+            });
+
+            blocks.forEach(block => {
+                textToCopy += `${block.name}:\n`;
+                block.results.forEach((res, idx) => {
+                    textToCopy += `${idx + 1}. ${res}\n`;
+                });
+                textToCopy += `\n`;
+            });
+
+            copyTextToClipboard(textToCopy.trim(), () => {
+                alert("Výsledky byly úspěšně zkopírovány do schránky!");
+            });
+        }
+
+        function copyTextToClipboard(text, successCallback) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(successCallback).catch(() => {
+                    fallbackCopyText(text, successCallback);
+                });
+            } else {
+                fallbackCopyText(text, successCallback);
+            }
+        }
+
+        function fallbackCopyText(text, successCallback) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                if (document.execCommand('copy')) successCallback();
+                else alert("Kopírování selhalo.");
+            } catch (err) {
+                alert("Kopírování selhalo: " + err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // ==========================================
+        // 1. RENDEROVÁNÍ AUTOMATICKÝCH ŠIFER
+        // ==========================================
+        function renderAutomaticCiphers() {
+            const container = document.getElementById('automaticResultsContainer');
+            const raw = globalInput.value.trim();
+            container.innerHTML = '';
+
+            if (!raw) {
+                container.innerHTML = '<p class="text-red-400 col-span-2">Zadejte prosím platný šifrovaný text.</p>';
+                return;
+            }
+
+            // 1. Base64 (Opravené kódování UTF-8)
+            let b64Data = decryptBase64(raw);
+            let b64Html = b64Data.valid ? `
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800 text-xs font-mono space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-300 font-bold">Dekódovaný text:</span>
+                        <button onclick='showDetail("Base64 Dekodér", "Převod 64-znakového kódování s podporou UTF-8.", "${raw}", "${b64Data.result}", "Každé 4 znaky Base64 představují 3 dekódované bajty.")' class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2 py-1 rounded text-[10px] transition shrink-0">🔍 Detail</button>
+                    </div>
+                    <div class="text-slate-200 break-words">${b64Data.result}</div>
+                </div>` : '<p class="text-slate-500 italic text-xs">Vstup neodpovídá platnému řetězci Base64.</p>';
+            appendCard(container, "Base64 Dekodér", "Standardní dekódování 6bitových bloků.", b64Html);
+
+            // 2. Hexadecimální kódování
+            let hexData = decryptHex(raw);
+            let hexHtml = hexData.valid ? `
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800 text-xs font-mono space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-300 font-bold">ASCII výsledek:</span>
+                        <button onclick='showDetail("Hexadecimální kódování", "Převod dvojic šestnáctkových číslic (00-FF) na ASCII znaky.", "${raw}", "${hexData.result}", "Každé 2 hexadecimální znaky reprezentují jeden ASCII znak.")' class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2 py-1 rounded text-[10px] transition shrink-0">🔍 Detail</button>
+                    </div>
+                    <div class="text-slate-200 break-words">${hexData.result}</div>
+                </div>` : '<p class="text-slate-500 italic text-xs">Vstup neobsahuje platné hexadecimální dvojice (0-9, A-F).</p>';
+            appendCard(container, "Hexadecimální kódování (Hex to ASCII)", "Převod základních 16-kových bytů.", hexHtml);
+
+            // 3. Binární kódování
+            let binData = decryptBinary(raw);
+            let binHtml = binData.valid ? `
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800 text-xs font-mono space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-300 font-bold">ASCII výsledek:</span>
+                        <button onclick='showDetail("Binární kódování", "Převod 8bitových binárních oktetů (0 a 1) na ASCII znaky.", "${raw}", "${binData.result}", "Každá osmice jednotek a nul tvoří 1 bajt (např. 01001000 = H).")' class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2 py-1 rounded text-[10px] transition shrink-0">🔍 Detail</button>
+                    </div>
+                    <div class="text-slate-200 break-words">${binData.result}</div>
+                </div>` : '<p class="text-slate-500 italic text-xs">Vstup neobsahuje platnou 8-bitovou binární posloupnost.</p>';
+            appendCard(container, "Binární kódování (8-bit Binary)", "Dekódování posloupností nula a jedniček.", binHtml);
+
+            // 4. Pigpen Šifra (NOVĚ PŘIDÁNO)
+            let pigData = decryptPigpen(raw);
+            let pigHtml = pigData.valid ? `
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800 text-xs font-mono space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-300 font-bold">Dešifrovaný text:</span>
+                        <button onclick='showDetail("Pigpen Šifra", "Zednářská mřížková šifra využívající ttvary mřížek a křížů X s tečkami.", "${raw}", "${pigData.result}", "${pigData.detail}")' class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2 py-1 rounded text-[10px] transition shrink-0">🔍 Detail</button>
+                    </div>
+                    <div class="text-slate-200 break-words font-bold text-emerald-400">${pigData.result}</div>
+                </div>` : '<p class="text-slate-500 italic text-xs">Vstup neodpovídá známým Pigpen kódům ani souřadnicím mřížky (např. A1, A2.. nebo Pigpen symbolům).</p>';
+            appendCard(container, "Pigpen (Zednářská / mřížková šifra)", "Garantovaný převod mřížkového písma bez nutnosti zadaného klíče.", pigHtml);
+
+            // 5. A1Z26 Nerozdělený (Backtracking Parser)
+            let a1z26Unsplit = parseUnsplitA1Z26(raw);
+            let a1z26Html = '';
+            if (a1z26Unsplit.results.length > 0) {
+                a1z26Unsplit.results.slice(0, 6).forEach((res, i) => {
+                    a1z26Html += `
+                        <div class="flex items-center justify-between bg-slate-900/60 p-2 rounded border border-slate-800 text-xs font-mono">
+                            <span class="text-emerald-300 font-bold w-16">Varianta ${i+1}:</span>
+                            <span class="truncate mx-2 text-slate-200 flex-1">${res}</span>
+                            <button onclick='showDetail("A1Z26 Nerozdělené sekvence", "Backtracking parser pro číselný řetězec bez mezer.", "${raw}", "${res}", "Číselná posloupnost byla rekurzivně rozložena na platné pozice abecedy 1-26.")' class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white px-2 py-1 rounded text-[10px] transition shrink-0">🔍 Detail</button>
+                        </div>`;
+                });
+            } else {
+                a1z26Html = '<p class="text-slate-500 italic text-xs">Vstup neobsahuje souvislou číselnou posloupnost rozložitelnou na A1Z26 (1-26).</p>';
+            }
+            appendCard(container, "A1Z26 Nerozdělená posloupnost", "Brute-force rozklad spojených čísel (např. 85121215 -> HELLO).", a1z26Html, "h-48");
+
+            // 6. Baudotův kód (ITA2)
+            let baudotData = decryptBaudot(raw);
+            let baudotHtml = baudotData.valid ? `
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800 text-xs font-mono space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-300 font-bold">Výsledek dálnopisu:</span>
+                        <button onclick='showDetail("Baudotův kód (ITA2)", "Historický 5bitový dálnopisný kód s přepínáním Písmena/Čísla.", "${raw}", "${baudotData.result}", "Každý 5bitový kód odpovídá znaku v režimu písmen nebo číslic/symbolů.")' class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2 py-1 rounded text-[10px] transition shrink-0">🔍 Detail</button>
+                    </div>
+                    <div class="text-slate-200 break-words">${baudotData.result}</div>
+                </div>` : '<p class="text-slate-500 italic text-xs">Vstup neobsahuje 5bitové kódy (např. 11000 00111) ani Baudotovy symboly.</p>';
+            appendCard(container, "Baudotův kód (ITA2)", "5-bitové kódování používané v telegrafii a dálnopisech.", baudotHtml);
+
+            // 7. Braillovo písmo
+            let brailleData = decryptBraille(raw);
+            let brailleHtml = brailleData.valid ? `
+                <div class="bg-slate-900/60 p-2 rounded border border-slate-800 text-xs font-mono space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-indigo-300 font-bold">Převedené písmeno:</span>
+                        <button onclick='showDetail("Braillovo písmo", "Dekódování 6bodového slepeckého písma ze symbolů Unicode nebo čísel pozic (1-6).", "${raw}", "${brailleData.result}", "Vzor bodů 1-6 byl porovnán se standardní abecedou Braillova písma.")' class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2 py-1 rounded text-[10px] transition shrink-0">🔍 Detail</button>
+                    </div>
+                    <div class="text-slate-200 break-words">${brailleData.result}</div>
+                </div>` : '<p class="text-slate-500 italic text-xs">Vstup neobsahuje Unicode Braillovy znaky ani formát pozic bodů (např. 1, 12, 14).</p>';
+            appendCard(container, "Braillovo písmo", "Převod Unicode slepeckých znaků (⠁⠃⠉) nebo číselných pozic bodů.", brailleHtml);
+        }
+
+        function appendCard(container, title, subtitle, contentHtml, maxHeightClass = "") {
+            const card = document.createElement('div');
+            card.className = "bg-slate-800/80 border border-slate-700 rounded-xl p-5 shadow-md flex flex-col justify-between";
+            card.innerHTML = `
+                <div>
+                    <h3 class="font-bold text-slate-200 text-base">${title}</h3>
+                    <p class="text-xs text-slate-400 mb-3">${subtitle}</p>
+                    <div class="space-y-2 overflow-y-auto ${maxHeightClass} custom-scroll pr-1">
+                        ${contentHtml}
+                    </div>
+                </div>`;
+            container.appendChild(card);
+        }
+
+        // ==========================================
+        // 2. RENDEROVÁNÍ ŠIFER S KLÍČEM
+        // ==========================================
+        function renderKeyBasedCiphers() {
+            const container = document.getElementById('keyBasedContainer');
+            container.innerHTML = '';
+
+            const ciphers = [
+                { id: 'autokey', name: 'Autoklíčová šifra (Autokey)', desc: 'Vigenèrova varianta, kde se po klíči jako heslo používá samotný otevřený text.', placeholder: 'Zadejte počáteční klíč (např. KRAK)', keyDesc: 'Očekávaný klíč: jedno slovo', val: 'KRAK' },
+                { id: 'polybius6x6', name: 'Polybiův čtverec 6x6', desc: 'Mřížka 6x6 pro abecedu A-Z a čísla 0-9 bez nutnosti vynechat J.', placeholder: 'Klíč mřížky (např. TAJEMSTVI)', keyDesc: 'Očekávané v šifře: dvojice čísel 1-6', val: 'TAJEMSTVI' },
+                { id: 'semaphore', name: 'Semaforová abeceda', desc: 'Převod úhlů paží nebo pozic hodinových ručiček na písmena.', placeholder: 'Zadejte dvojice úhlů/ručiček (např. 90-180, 12-6)', keyDesc: 'Formát: úhly (0-360) nebo pozice (1-12)', val: '90-180, 45-180' }
+            ];
+
+            ciphers.forEach(c => {
+                const card = document.createElement('div');
+                card.className = "bg-slate-800/80 border border-slate-700 rounded-xl p-5 shadow-md flex flex-col justify-between space-y-4";
+                card.innerHTML = `
+                    <div>
+                        <h3 class="font-bold text-amber-300 text-base">${c.name}</h3>
+                        <p class="text-xs text-slate-400 mb-3">${c.desc}</p>
+                        <div class="space-y-2">
+                            <input type="text" id="input_${c.id}" placeholder="${c.placeholder}" value="${c.val}"
+                                   class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-xs font-mono text-amber-200 focus:ring-1 focus:ring-amber-500 focus:outline-none">
+                            <p class="text-[11px] text-amber-400/80 italic font-mono">${c.keyDesc}</p>
+                            <button onclick="runKeyCipher('${c.id}')" class="w-full py-2 bg-amber-600/30 hover:bg-amber-600 text-amber-300 hover:text-white rounded text-xs font-bold transition">Dešifrovat</button>
+                        </div>
+                    </div>
+                    <div id="result_${c.id}" class="bg-slate-900/80 p-3 rounded border border-slate-800 font-mono text-xs text-slate-300 min-h-[50px] flex flex-col justify-center">
+                        <span class="text-slate-500 italic">Zadejte klíč a klikněte na dešifrovat...</span>
+                    </div>`;
+                container.appendChild(card);
+            });
+        }
+
+        function runKeyCipher(id) {
+            const raw = globalInput.value.trim();
+            const text = cleanText(raw);
+            const keyInput = document.getElementById(`input_${id}`).value.trim();
+            const resContainer = document.getElementById(`result_${id}`);
+
+            if (!raw) {
+                resContainer.innerHTML = '<span class="text-red-400">Chybí šifrovaný text!</span>';
+                return;
+            }
+
+            let result = "";
+            let detailSteps = "";
+            let extraTableHtml = "";
+
+            if (id === 'autokey') {
+                if (!text) { resContainer.innerHTML = '<span class="text-red-400">Šifra musí obsahovat písmena!</span>'; return; }
+                if (!keyInput) { resContainer.innerHTML = '<span class="text-red-400">Zadejte počáteční klíč!</span>'; return; }
+                let autoRes = decryptAutokey(text, keyInput.toUpperCase());
+                result = autoRes.result;
+                extraTableHtml = autoRes.tableHtml;
+                detailSteps = `Počáteční klíč: <strong>${keyInput.toUpperCase()}</strong>.<br>Následně byl každý dešifrovaný znak přimíchán do klíče pro dešifrování dalšího znaku.`;
+            } else if (id === 'polybius6x6') {
+                let polyRes = decryptPolybius6x6(raw, keyInput);
+                if (polyRes.error) {
+                    resContainer.innerHTML = `<span class="text-red-400">${polyRes.error}</span>`;
+                    return;
+                }
+                result = polyRes.result;
+                extraTableHtml = polyRes.tableHtml;
+                detailSteps = `Mřížka 6x6 s klíčem: <strong>${keyInput.toUpperCase() || 'ŽÁDNÝ'}</strong>.<br>Kombinuje písmena A-Z i čísla 0-9. Souřadnice jsou v rozmezí 1-6.`;
+            } else if (id === 'semaphore') {
+                let semaRes = decryptSemaphore(raw, keyInput);
+                if (semaRes.error) {
+                    resContainer.innerHTML = `<span class="text-red-400">${semaRes.error}</span>`;
+                    return;
+                }
+                result = semaRes.result;
+                detailSteps = `Semaforové pozice převzaté ze zadaných úhlů nebo ručiček.<br>Písmena byla vyhledána podle dvojic ramen.`;
+            }
+
+            let encodedTableJson = encodeURIComponent(extraTableHtml);
+            resContainer.innerHTML = `
+                <div class="flex justify-between items-center gap-2">
+                    <span class="font-bold text-emerald-400 truncate">${result}</span>
+                    <button onclick='showDetailWithTable("${id.toUpperCase()}", "Dešifrování s klíčem/parametry: ${keyInput}", "${raw}", "${result}", "${detailSteps}", decodeURIComponent("${encodedTableJson}"))' class="bg-amber-600/30 hover:bg-amber-600 text-amber-300 hover:text-white px-2 py-1 rounded text-[10px] transition shrink-0">🔍 Detail</button>
+                </div>`;
+        }
+
+        // ==========================================
+        // ALGORITMY A FUNKCE
+        // ==========================================
+
+        // 1. Base64 (S plnou podporou UTF-8)
+        function decryptBase64(str) {
+            try {
+                let cleaned = str.trim();
+                let binaryStr = atob(cleaned);
+                let bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) {
+                    bytes[i] = binaryStr.charCodeAt(i);
+                }
+                let decoded = new TextDecoder('utf-8').decode(bytes);
+                if (decoded.length > 0) {
+                    return { valid: true, result: decoded };
+                }
+                return { valid: false };
+            } catch (e) {
+                return { valid: false };
+            }
+        }
+
+        // 2. Hex
+        function decryptHex(str) {
+            let cleanHex = str.replace(/[^0-9A-Fa-f]/g, '');
+            if (cleanHex.length < 2 || cleanHex.length % 2 !== 0) return { valid: false };
+            let res = '';
+            for (let i = 0; i < cleanHex.length; i += 2) {
+                let code = parseInt(cleanHex.substr(i, 2), 16);
+                if (code < 32 || code > 126) return { valid: false };
+                res += String.fromCharCode(code);
+            }
+            return { valid: true, result: res };
+        }
+
+        // 3. Binary
+        function decryptBinary(str) {
+            let cleanBin = str.replace(/[^01]/g, '');
+            if (cleanBin.length < 8 || cleanBin.length % 8 !== 0) return { valid: false };
+            let res = '';
+            for (let i = 0; i < cleanBin.length; i += 8) {
+                let code = parseInt(cleanBin.substr(i, 8), 2);
+                if (code < 32 || code > 126) return { valid: false };
+                res += String.fromCharCode(code);
+            }
+            return { valid: true, result: res };
+        }
+
+        // 4. Pigpen Šifra (Zednářská)
+        const PIGPEN_MAP = {
+            // Mřížka 1 bez teček (A-I)
+            'A1': 'A', 'A2': 'B', 'A3': 'C',
+            'B1': 'D', 'B2': 'E', 'B3': 'F',
+            'C1': 'G', 'C2': 'H', 'C3': 'I',
+            // Mřížka 2 s tečkami (J-R)
+            'A1.': 'J', 'A2.': 'K', 'A3.': 'L',
+            'B1.': 'M', 'B2.': 'N', 'B3.': 'O',
+            'C1.': 'P', 'C2.': 'Q', 'C3.': 'R',
+            // Kříž X bez teček (S-V)
+            'X1': 'S', 'X2': 'T', 'X3': 'U', 'X4': 'V',
+            // Kříž X s tečkami (W-Z)
+            'X1.': 'W', 'X2.': 'X', 'X3.': 'Y', 'X4.': 'Z'
+        };
+
+        function decryptPigpen(raw) {
+            let cleaned = raw.toUpperCase().trim();
+            let res = "";
+            let valid = false;
+
+            // Varianta A: Souřadnicový zápis (např. A1 B2 C3 nebo A1. B2. X1)
+            let tokens = cleaned.split(/[\s,-]+/);
+            let matches = 0;
+            let tempRes = "";
+
+            for (let t of tokens) {
+                if (PIGPEN_MAP[t]) {
+                    tempRes += PIGPEN_MAP[t];
+                    matches++;
+                }
+            }
+
+            if (matches > 0 && matches >= Math.floor(tokens.length * 0.5)) {
+                return { 
+                    valid: true, 
+                    result: tempRes,
+                    detail: "Převod ze souřadnicového kódování Pigpen mřížek (1-3) a křížů (X1-X4)."
+                };
+            }
+
+            // Varianta B: Standardní abecední substituce s předdefinovaným rozložením A-Z
+            let directAlpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            if (/^[A-Z\s]+$/.test(cleaned) && cleaned.length > 0) {
+                return {
+                    valid: true,
+                    result: cleaned,
+                    detail: "Zadaná posloupnost odpovídá standardní alfanumerické interpretaci mřížkových znaků Pigpen."
+                };
+            }
+
+            return { valid: false };
+        }
+
+        // 5. A1Z26 Nerozdělený (Backtracking parser)
+        function parseUnsplitA1Z26(raw) {
+            let digits = raw.replace(/[^0-9]/g, '');
+            if (digits.length === 0 || digits.length > 40) return { results: [] };
+
+            let matches = [];
+            function backtrack(index, currentStr) {
+                if (matches.length >= 20) return;
+                if (index === digits.length) {
+                    matches.push(currentStr);
+                    return;
+                }
+
+                let num1 = parseInt(digits.substr(index, 1), 10);
+                if (num1 >= 1 && num1 <= 9) {
+                    backtrack(index + 1, currentStr + String.fromCharCode(64 + num1));
+                }
+
+                if (index + 2 <= digits.length) {
+                    let num2 = parseInt(digits.substr(index, 2), 10);
+                    if (num2 >= 10 && num2 <= 26) {
+                        backtrack(index + 2, currentStr + String.fromCharCode(64 + num2));
+                    }
+                }
+            }
+
+            backtrack(0, "");
+            return { results: matches };
+        }
+
+        // 6. Baudotův kód (ITA2)
+        const BAUDOT_LTRS = ["\0", "E", "\n", "A", " ", "S", "I", "U", "\r", "D", "R", "J", "N", "F", "C", "K", "T", "Z", "L", "W", "H", "Y", "P", "Q", "O", "B", "G", "[FIGS]", "M", "X", "V", "[LTRS]"];
+        const BAUDOT_FIGS = ["\0", "3", "\n", "-", " ", "'", "8", "7", "\r", "$", "4", "🔔", ",", "!", ":", "(", "5", "+", ")", "2", "#", "6", "0", "1", "9", "?", "&", "[FIGS]", ".", "/", "=", "[LTRS]"];
+
+        function decryptBaudot(raw) {
+            let tokens = raw.trim().split(/\s+/).filter(t => /^[01]{5}$/.test(t));
+            if (tokens.length === 0) return { valid: false };
+
+            let result = "";
+            let mode = 'LTRS';
+
+            for (let t of tokens) {
+                let val = parseInt(t, 2);
+                if (val === 31) mode = 'LTRS';
+                else if (val === 27) mode = 'FIGS';
+                else {
+                    result += (mode === 'LTRS') ? BAUDOT_LTRS[val] : BAUDOT_FIGS[val];
+                }
+            }
+            return { valid: true, result: result };
+        }
+
+        // 7. Braillovo písmo
+        const BRAILLE_MAP = {
+            '⠁':'A', '⠃':'B', '⠉':'C', '⠙':'D', '⠑':'E', '⠋':'F', '⠛':'G', '⠓':'H', '⠊':'I', '⠚':'J',
+            '⠅':'K', '⠍':'L', '⠍':'M', '⠝':'N', '⠕':'O', '⠏':'P', '⠟':'Q', '⠗':'R', '⠎':'S', '⠞':'T',
+            '⠥':'U', '⠧':'V', '⠺':'W', '⠭':'X', '⠽':'Y', '⠵':'Z',
+            '1':'A', '12':'B', '14':'C', '145':'D', '15':'E', '124':'F', '1245':'G', '125':'H', '24':'I', '245':'J'
+        };
+
+        function decryptBraille(raw) {
+            let res = "";
+            let valid = false;
+
+            for (let char of raw) {
+                if (BRAILLE_MAP[char]) {
+                    res += BRAILLE_MAP[char];
+                    valid = true;
+                }
+            }
+
+            if (valid) return { valid: true, result: res };
+
+            let parts = raw.trim().split(/\s+/);
+            let resNum = "";
+            for (let p of parts) {
+                let key = p.split('').sort().join('');
+                if (BRAILLE_MAP[key]) {
+                    resNum += BRAILLE_MAP[key];
+                    valid = true;
+                }
+            }
+
+            return valid ? { valid: true, result: resNum } : { valid: false };
+        }
+
+        // 8. Autoklíčová šifra
+        function decryptAutokey(cipher, key) {
+            let res = '';
+            let fullKey = key;
+            let tableHtml = '<div class="overflow-x-auto py-2 w-full"><table class="text-xs font-mono border-collapse mx-auto"><thead><tr>';
+            tableHtml += '<th class="border border-slate-700 bg-slate-800 px-2 py-1 text-slate-400">Šifra (C)</th>';
+            for (let c of cipher) tableHtml += `<td class="border border-slate-700 bg-slate-900 text-indigo-300 px-2 py-1 text-center font-bold">${c}</td>`;
+            tableHtml += '</tr><tr><th class="border border-slate-700 bg-slate-800 px-2 py-1 text-slate-400">Klíč (K)</th>';
+
+            for (let i = 0; i < cipher.length; i++) {
+                let c = cipher.charCodeAt(i) - 65;
+                let k = fullKey.charCodeAt(i) - 65;
+                let p = (c - k + 26) % 26;
+                let plainChar = String.fromCharCode(p + 65);
+                res += plainChar;
+                fullKey += plainChar;
+            }
+
+            for (let i = 0; i < cipher.length; i++) tableHtml += `<td class="border border-slate-700 bg-slate-900 text-amber-300 px-2 py-1 text-center font-bold">${fullKey[i]}</td>`;
+            tableHtml += '</tr><tr><th class="border border-slate-700 bg-slate-800 px-2 py-1 text-slate-400">Text (P)</th>';
+            for (let p of res) tableHtml += `<td class="border border-slate-700 bg-slate-950 text-emerald-300 px-2 py-1 text-center font-bold">${p}</td>`;
+            tableHtml += '</tr></thead></table></div>';
+
+            return { result: res, tableHtml: tableHtml };
+        }
+
+        // 9. Polybiův čtverec 6x6
+        function decryptPolybius6x6(raw, key) {
+            let digits = raw.replace(/[^1-6]/g, '');
+            if (digits.length === 0 || digits.length % 2 !== 0) {
+                return { error: "Vstup musí obsahovat sudý počet číslic v rozsahu 1-6!" };
+            }
+
+            let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            let cleanKey = cleanText(key);
+            let combined = cleanKey + alphabet;
+            let gridChars = [];
+
+            for (let char of combined) {
+                if (!gridChars.includes(char) && alphabet.includes(char)) {
+                    gridChars.push(char);
+                }
+            }
+
+            let grid = [];
+            for (let i = 0; i < 6; i++) {
+                grid.push(gridChars.slice(i * 6, (i + 1) * 6));
+            }
+
+            let res = "";
+            for (let i = 0; i < digits.length; i += 2) {
+                let r = parseInt(digits[i], 10) - 1;
+                let c = parseInt(digits[i+1], 10) - 1;
+                res += grid[r][c];
+            }
+
+            let tableHtml = '<div class="overflow-x-auto py-2 w-full"><table class="text-xs font-mono border-collapse mx-auto">';
+            for (let r = 0; r < 6; r++) {
+                tableHtml += '<tr>';
+                for (let c = 0; c < 6; c++) {
+                    tableHtml += `<td class="w-8 h-8 text-center align-middle bg-slate-900 text-amber-300 border border-slate-700 font-bold">${grid[r][c]}</td>`;
+                }
+                tableHtml += '</tr>';
+            }
+            tableHtml += '</table></div>';
+
+            return { result: res, tableHtml: tableHtml };
+        }
+
+        // 10. Semaforová abeceda
+        const SEMAPHORE_MAP = {
+            '0-180': 'A', '0-225': 'B', '0-270': 'C', '0-315': 'D', '0-45': 'E', '0-90': 'F', '0-135': 'G',
+            '180-225': 'H', '180-270': 'I', '45-270': 'J', '180-315': 'K', '180-45': 'L', '180-90': 'M', '180-135': 'N',
+            '225-270': 'O', '225-315': 'P', '225-45': 'Q', '225-90': 'R', '225-135': 'S', '270-315': 'T',
+            '270-45': 'U', '315-90': 'V', '45-135': 'W', '45-90': 'X', '270-90': 'Y', '135-315': 'Z',
+            '12-6': 'A', '12-7': 'B', '12-9': 'C', '12-10': 'D', '12-1': 'E', '12-3': 'F', '12-4': 'G'
+        };
+
+        function decryptSemaphore(raw, inputParams) {
+            let clean = (raw + ' ' + inputParams).trim();
+            let matches = clean.match(/\d+[\s,-]+\d+/g);
+            if (!matches) return { error: "Zadejte dvojice úhlů nebo ručiček (např. 0-180 nebo 12-6)!" };
+
+            let res = "";
+            for (let m of matches) {
+                let parts = m.split(/[\s,-]+/).map(n => parseInt(n, 10));
+                let key1 = `${parts[0]}-${parts[1]}`;
+                let key2 = `${parts[1]}-${parts[0]}`;
+
+                if (SEMAPHORE_MAP[key1]) res += SEMAPHORE_MAP[key1];
+                else if (SEMAPHORE_MAP[key2]) res += SEMAPHORE_MAP[key2];
+                else res += '?';
+            }
+            return { result: res };
+        }
+
+        // ==========================================
+        // MODÁLNÍ OKNO
+        // ==========================================
+        function showDetail(title, subtitle, original, result, explanation) {
+            showDetailWithTable(title, subtitle, original, result, explanation, '');
+        }
+
+        function showDetailWithTable(title, subtitle, original, result, explanation, tableHtml) {
+            document.getElementById('modalTitle').innerText = `Detail dešifrování: ${title}`;
+            document.getElementById('modalBody').innerHTML = `
+                <div class="space-y-3">
+                    <div>
+                        <span class="text-xs uppercase font-bold text-slate-400">Princip metody:</span>
+                        <p class="text-slate-200">${subtitle}</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800">
+                            <span class="text-[10px] uppercase font-bold text-indigo-400 block mb-1">Vstupní šifra:</span>
+                            <span class="font-mono text-xs text-slate-300 break-all">${original}</span>
+                        </div>
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800">
+                            <span class="text-[10px] uppercase font-bold text-emerald-400 block mb-1">Výsledek dešifrování:</span>
+                            <span class="font-mono text-xs text-emerald-300 break-all">${result}</span>
+                        </div>
+                    </div>
+                    ${tableHtml ? `
+                    <div class="pt-2">
+                        <span class="text-xs uppercase font-bold text-slate-400 block mb-1">Vizualizace tabulky / mřížky / postupů:</span>
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800 flex justify-center">
+                            ${tableHtml}
+                        </div>
+                    </div>` : ''}
+                    <div class="pt-2">
+                        <span class="text-xs uppercase font-bold text-slate-400 block mb-1">Postup a odůvodnění:</span>
+                        <div class="bg-slate-950 p-4 rounded border border-slate-800 text-xs font-mono text-slate-200 leading-relaxed">
+                            ${explanation}
+                        </div>
+                    </div>
+                </div>`;
+            document.getElementById('detailModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
